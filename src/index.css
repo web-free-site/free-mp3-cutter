@@ -1,0 +1,32 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* WaveSurfer renders its scroll container inside a shadow root, exposed via
+   part="scroll" — style it through ::part() to match the app theme instead
+   of the browser's default scrollbar. */
+.waveform-host > div::part(scroll) {
+  scrollbar-color: #a5b4fc transparent;
+  scrollbar-width: thin;
+}
+.waveform-host > div::part(scroll)::-webkit-scrollbar {
+  height: 8px;
+}
+.waveform-host > div::part(scroll)::-webkit-scrollbar-track {
+  background: transparent;
+}
+.waveform-host > div::part(scroll)::-webkit-scrollbar-thumb {
+  background-color: #a5b4fc;
+  border-radius: 9999px;
+}
+.waveform-host > div::part(scroll)::-webkit-scrollbar-thumb:hover {
+  background-color: #818cf8;
+}
+.dark .waveform-host > div::part(scroll) {
+  scrollbar-color: #4338ca transparent;
+}
+.dark .waveform-host > div::part(scroll)::-webkit-scrollbar-thumb {
+  background-color: #4338ca;
+}
+.dark .waveform-host > div::part(scroll)::-webkit-scrollbar-thumb:hover {
+  background-color: #4f46e5;
+}

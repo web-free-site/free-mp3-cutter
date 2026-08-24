@@ -1,0 +1,5 @@
+{
+  "name": "AudioSlice",
+  "description": "Split MP3, WAV, M4A and other audio files into equal-length chunks entirely in the browser. No uploads, no server, no storage.",
+  "requestFramePermissions": []
+}
