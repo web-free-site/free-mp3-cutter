@@ -1,13 +1,13 @@
 {
-  "name": "audioslice",
-  "description": "Cut, split, trim, and time-mark MP3, WAV, M4A and other audio files entirely in the browser. No uploads, no server, no storage.",
+  "name": "free-mp3-cutter",
+  "description": "Free MP3 Cutter — cut, split, trim MP3, WAV, M4A and other audio entirely in the browser.",
   "private": true,
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3947 --host=0.0.0.0",
-    "build": "vite build",
+    "build": "node scripts/download-ffmpeg-core.mjs && vite build && node scripts/prerender-seo.mjs && node scripts/generate-sitemap.mjs",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
@@ -22,6 +22,7 @@
     "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
+    "react-router-dom": "^7.6.2",
     "vite": "^6.2.3",
     "wavesurfer.js": "^7.12.11"
   },

@@ -1,5 +1,28 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
+import { SITE } from '../site';
+
+const FFMPEG_CORE_CACHE = 'free-mp3-cutter-ffmpeg-core-lgpl-v1';
+
+async function cachedToBlobURL(url: string, mimeType: string): Promise<string> {
+  try {
+    if (typeof caches !== 'undefined') {
+      const cache = await caches.open(FFMPEG_CORE_CACHE);
+      let response = await cache.match(url);
+      if (!response) {
+        response = await fetch(url, { mode: 'cors' });
+        if (response.ok) await cache.put(url, response.clone());
+      }
+      if (response?.ok) {
+        const blob = await response.blob();
+        return URL.createObjectURL(blob);
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  return toBlobURL(url, mimeType);
+}
 import { AudioFileDetails, ChunkInfo } from '../types';
 import { formatFFmpegTime, formatHumanDuration, formatTimestampRange, getFileExtensionAndBase } from '../utils/formatters';
 
@@ -55,37 +78,38 @@ export async function getFFmpegInstance(onLog?: (msg: string) => void): Promise<
     });
   }
 
-  const cdnProviders = [
-    'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm',
-    'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm',
-  ];
+  const baseURL = new URL(SITE.ffmpegCore.runtimePath, window.location.origin).href.replace(/\/$/, '');
 
-  let lastError: Error | null = null;
-
-  for (const baseURL of cdnProviders) {
-    try {
-      if (onLog) onLog(`Loading FFmpeg WASM core from ${baseURL}...`);
-      
-      const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
-      const wasmURL = await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
-
-      await ffmpegInstance.load({
-        coreURL,
-        wasmURL,
-      });
-
-      isLoaded = true;
-      if (onLog) onLog('FFmpeg WASM initialized successfully!');
-      return ffmpegInstance;
-    } catch (err) {
-      lastError = err as Error;
-      if (onLog) onLog(`Failed loading from ${baseURL}, trying fallback CDN...`);
+  try {
+    if (onLog) {
+      onLog(`Loading LGPL FFmpeg WASM core (${SITE.ffmpegCore.version}) from ${baseURL}…`);
     }
-  }
 
-  throw new Error(
-    `Failed to load FFmpeg WASM engine (${lastError?.message || 'Network error'}). Please check internet connection.`
-  );
+    const jsUrl = `${baseURL}/ffmpeg-core.js`;
+    const wasmUrl = `${baseURL}/ffmpeg-core.wasm`;
+
+  let coreURL = jsUrl;
+    let wasmURL = wasmUrl;
+    if (baseURL.startsWith(window.location.origin)) {
+      // Same-origin: direct URLs (cached by the browser and Cloudflare).
+    } else {
+      coreURL = await cachedToBlobURL(jsUrl, 'text/javascript');
+      wasmURL = await cachedToBlobURL(wasmUrl, 'application/wasm');
+    }
+
+    await ffmpegInstance.load({
+      coreURL,
+      wasmURL,
+    });
+
+    isLoaded = true;
+    if (onLog) onLog('FFmpeg WASM initialized successfully (cached for next visit).');
+    return ffmpegInstance;
+  } catch (err) {
+    throw new Error(
+      `Failed to load FFmpeg WASM engine (${(err as Error)?.message || 'Network error'}). Please check your internet connection.`,
+    );
+  }
 }
 
 /**
@@ -142,19 +166,27 @@ export async function splitAudioFile(
     // Try fast stream copy first (-c copy)
     try {
       await ffmpeg.exec([
-        '-ss', startTimeFormatted,
-        '-i', inputFilename,
-        '-t', durationFormatted,
-        '-c', 'copy',
-        '-avoid_negative_ts', 'make_zero',
+        '-i',
+        inputFilename,
+        '-ss',
+        startTimeFormatted,
+        '-t',
+        durationFormatted,
+        '-c',
+        'copy',
+        '-avoid_negative_ts',
+        'make_zero',
         outputFilename,
       ]);
 
       const data = await ffmpeg.readFile(outputFilename);
-      const uint8Array = new Uint8Array(data as ArrayBuffer);
-      
-      if (uint8Array.byteLength > 100) {
-        chunkBlob = new Blob([uint8Array], { type: copyMimeType });
+      const candidate =
+        data instanceof Uint8Array
+          ? new Blob([data], { type: copyMimeType })
+          : new Blob([new Uint8Array(data as unknown as ArrayBuffer)], { type: copyMimeType });
+
+      if (candidate.size > 100) {
+        chunkBlob = candidate;
       } else {
         await ffmpeg.deleteFile(outputFilename).catch(() => {});
       }
@@ -177,16 +209,21 @@ export async function splitAudioFile(
       finalFilename = `${baseName}_part${paddedNum}.${reEncodeStrategy.extension}`;
 
       await ffmpeg.exec([
-        '-ss', startTimeFormatted,
-        '-i', inputFilename,
-        '-t', durationFormatted,
+        '-i',
+        inputFilename,
+        '-ss',
+        startTimeFormatted,
+        '-t',
+        durationFormatted,
         ...reEncodeStrategy.encodeArgs,
         finalFilename,
       ]);
 
       const data = await ffmpeg.readFile(finalFilename);
-      const uint8Array = new Uint8Array(data as ArrayBuffer);
-      chunkBlob = new Blob([uint8Array], { type: reEncodeStrategy.mimeType });
+      chunkBlob =
+        data instanceof Uint8Array
+          ? new Blob([data], { type: reEncodeStrategy.mimeType })
+          : new Blob([new Uint8Array(data as unknown as ArrayBuffer)], { type: reEncodeStrategy.mimeType });
     }
 
     // Clean up temporary output file in FFmpeg FS

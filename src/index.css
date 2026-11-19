@@ -30,3 +30,74 @@
 .dark .waveform-host > div::part(scroll)::-webkit-scrollbar-thumb:hover {
   background-color: #4f46e5;
 }
+
+.seo-prerender {
+  max-width: 48rem;
+  margin: 1rem auto;
+  padding: 0 1rem;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+.seo-prerender h1 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+.dark .seo-prerender,
+.dark .seo-prerender h1 {
+  color: #cbd5e1;
+}
+#root:not(:empty) + .seo-prerender,
+#root:not(:empty) ~ .seo-prerender,
+body:has(#root:not(:empty)) > .seo-prerender,
+body:has(#root:not(:empty)) .seo-prerender {
+  display: none;
+}
+
+.ad-slot {
+  text-align: center;
+  margin: 0.5rem auto;
+  max-width: 100%;
+}
+.ad-slot__label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  margin-bottom: 0.25rem;
+}
+.ad-slot__frame {
+  margin: 0 auto;
+  display: block;
+}
+.ad-mobile-sticky {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 0.25rem;
+  border-top: 1px solid #e2e8f0;
+}
+.dark .ad-mobile-sticky {
+  background: rgba(15, 23, 42, 0.95);
+  border-top-color: #334155;
+}
+@media (min-width: 768px) {
+  .ad-mobile-sticky {
+    display: none;
+  }
+}
+.ad-smartlink {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+.site-shell {
+  background: #fcfcfc;
+  color: #1a1a1a;
+}
+.dark .site-shell {
+  background: #020617;
+  color: #f1f5f9;
+}

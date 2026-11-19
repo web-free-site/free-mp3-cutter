@@ -36,6 +36,26 @@ function buildClipFilterArgs(gainDb: number, durationFormatted: string, spoil?: 
   return chain.length > 0 ? ['-af', chain.join(',')] : [];
 }
 
+function fileDataToBlob(data: Uint8Array | string, mimeType: string): Blob {
+  if (data instanceof Uint8Array) return new Blob([data], { type: mimeType });
+  const bytes = new Uint8Array(data.length);
+  for (let i = 0; i < data.length; i++) bytes[i] = data.charCodeAt(i) & 0xff;
+  return new Blob([bytes], { type: mimeType });
+}
+
+async function readOutputBlob(
+  ffmpeg: Awaited<ReturnType<typeof getFFmpegInstance>>,
+  filename: string,
+  mimeType: string,
+): Promise<Blob> {
+  const data = await ffmpeg.readFile(filename);
+  const blob = fileDataToBlob(data as Uint8Array | string, mimeType);
+  if (blob.size < 128) {
+    throw new Error(`FFmpeg produced an empty output for ${filename} (${blob.size} bytes). Try a longer selection or re-encode.`);
+  }
+  return blob;
+}
+
 /**
  * Renders manually-picked clips (trim + gain) via FFmpeg WASM, optionally
  * concatenating them into a single output file.
@@ -53,7 +73,8 @@ export async function exportClips(
 
   const file = fileDetails.file;
   const { baseName, extension } = getFileExtensionAndBase(file.name);
-  const strategy = getCodecStrategy(extension);
+  // Default export is cut MP3 (brief); stream-copy paths may keep source format in split mode only.
+  const strategy = getCodecStrategy('mp3');
   const inputFilename = `edit_input_${Date.now()}.${extension}`;
 
   onProgress(2, 0, clips.length, 'Initializing FFmpeg WASM audio engine...');
@@ -75,21 +96,53 @@ export async function exportClips(
 
       const startFormatted = formatFFmpegTime(clip.startSec);
       const durationFormatted = formatFFmpegTime(durationSec);
-      const partFilename = `edit_part${i.toString().padStart(2, '0')}.${strategy.extension}`;
+      const outputExt =
+        extension === 'mp3' && clip.gainDb === 0 && !(spoil?.enabled) ? extension : strategy.extension;
+      const partFilename = `edit_part${i.toString().padStart(2, '0')}.${outputExt}`;
       const filterArgs = buildClipFilterArgs(clip.gainDb, durationFormatted, spoil);
+      const needsReencode = filterArgs.length > 0 || outputExt !== extension;
+      const outMime = getCodecStrategy(outputExt).mimeType;
 
-      await ffmpeg.exec([
-        '-ss', startFormatted,
-        '-t', durationFormatted,
-        '-i', inputFilename,
-        ...filterArgs,
-        ...strategy.encodeArgs,
-        partFilename,
-      ]);
+      let blob: Blob | null = null;
 
-      const data = await ffmpeg.readFile(partFilename);
-      const uint8Array = new Uint8Array(data as ArrayBuffer);
-      const blob = new Blob([uint8Array], { type: strategy.mimeType });
+      if (!needsReencode && extension === 'mp3') {
+        try {
+          await ffmpeg.exec([
+            '-i',
+            inputFilename,
+            '-ss',
+            startFormatted,
+            '-t',
+            durationFormatted,
+            '-c',
+            'copy',
+            '-avoid_negative_ts',
+            'make_zero',
+            partFilename,
+          ]);
+          const data = await ffmpeg.readFile(partFilename);
+          const candidate = fileDataToBlob(data as Uint8Array | string, outMime);
+          if (candidate.size >= 128) blob = candidate;
+        } catch {
+          await ffmpeg.deleteFile(partFilename).catch(() => {});
+        }
+      }
+
+      if (!blob) {
+        await ffmpeg.exec([
+          '-i',
+          inputFilename,
+          '-ss',
+          startFormatted,
+          '-t',
+          durationFormatted,
+          ...filterArgs,
+          ...strategy.encodeArgs,
+          partFilename,
+        ]);
+        blob = await readOutputBlob(ffmpeg, partFilename, strategy.mimeType);
+      }
+
       partFilenames.push(partFilename);
 
       clipResults.push({
@@ -117,8 +170,7 @@ export async function exportClips(
     const joinedFilename = `edit_joined.${strategy.extension}`;
     await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', concatListFilename, '-c', 'copy', joinedFilename]);
 
-    const joinedData = await ffmpeg.readFile(joinedFilename);
-    const joinedBlob = new Blob([new Uint8Array(joinedData as ArrayBuffer)], { type: strategy.mimeType });
+    const joinedBlob = await readOutputBlob(ffmpeg, joinedFilename, strategy.mimeType);
     const totalDuration = clips.reduce((acc, c) => acc + Math.max(0, c.endSec - c.startSec), 0);
 
     await ffmpeg.deleteFile(concatListFilename).catch(() => {});

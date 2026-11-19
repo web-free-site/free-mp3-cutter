@@ -1,6 +1,7 @@
 node_modules/
 build/
 dist/
+public/vendor/ffmpeg-core-0.12.6-lgpl/
 coverage/
 .DS_Store
 *.log
