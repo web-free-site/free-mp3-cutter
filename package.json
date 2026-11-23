@@ -1,13 +1,13 @@
 {
   "name": "free-mp3-cutter",
-  "description": "Free MP3 Cutter — cut, split, trim MP3, WAV, M4A and other audio entirely in the browser.",
+  "description": "Free MP3 Cutter \u2014 cut, split, trim MP3, WAV, M4A and other audio entirely in the browser.",
   "private": true,
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3947 --host=0.0.0.0",
-    "build": "node scripts/download-ffmpeg-core.mjs && vite build && node scripts/prerender-seo.mjs && node scripts/generate-sitemap.mjs",
+    "build": "node scripts/download-ffmpeg-core.mjs && vite build && node scripts/prerender-seo.mjs && node scripts/generate-sitemap.mjs && node scripts/inject-hub-legal.mjs",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
